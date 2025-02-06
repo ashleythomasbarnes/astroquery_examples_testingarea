@@ -1,4 +1,9 @@
-# ESO Science Archive - Jupyter Notebooks
+<h1 style="text-align: center;">
+  <img src="http://archive.eso.org/i/esologo.png" alt="ESO Logo" width="50" style="vertical-align: middle;">
+  ESO Science Archive - Jupyter Notebooks
+</h1>
+
+<!-- # ESO Science Archive - (astroquery) Notebooks -->
 
 This repository contains Jupyter notebooks designed to introduce and interact with the [ESO Science Archive](https://archive.eso.org/cms.html). These notebooks specifically demonstrate the usage of the `astroquery.eso` module for querying, retrieving, and analyzing astronomical data from ESO's extensive archive.
 
