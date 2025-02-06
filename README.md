@@ -15,7 +15,7 @@ The [ESO Science Archive](https://archive.eso.org/cms.html) is a vast repository
 
 ### Prerequisites
 Ensure you have the following installed:
-- Python (>=3.8)
+- Python (>=3.9)
 - Jupyter Notebook or Jupyter Lab
 - Required Python libraries: `astroquery`
 - Recommended Python libraries: `numpy`, `matplotlib`, `astropy`, `astroquery` 
