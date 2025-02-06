@@ -22,7 +22,7 @@ Ensure you have the following installed:
 
 You can install these dependencies using:
 ```sh
-pip install numpy matplotlib astropy astroquery pandas
+pip install numpy matplotlib astropy astroquery
 ```
 
 ### Running the Notebook
