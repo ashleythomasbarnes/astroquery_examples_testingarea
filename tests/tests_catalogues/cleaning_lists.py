@@ -1,13 +1,11 @@
 """ Module that performs some lists massaging to work well with arg.parser
 """
 
-
 import numpy as np
 from astropy.table import MaskedColumn
 import astropy.units as u
 
-import msgs
-import checks
+# import checks
 
 
 def make_list_of_fits_files(args_input, verify_fits=False) -> list:

@@ -1,14 +1,12 @@
-r"""Child class to run queries to the ESO catalogue
-"""
-
 import numpy as np
 from astropy.table import MaskedColumn
 
 import default
-import msgs
 import tap_queries
 import query
 
+# Define default values
+default = default.Default()
 
 class ESOCatalogues(query.Query):
     r"""This class is designed to query the scientific catalogues provided by the principal investigators of ESO
@@ -49,14 +47,14 @@ class ESOCatalogues(query.Query):
         # Require that title and version are present in result_from_query
         for check_column in ['title', 'version']:
             if check_column not in self.which_columns():
-                msgs.warning('{} column not present, `last_version` will not be created'.format(check_column))
+                print('{} column not present, `last_version` will not be created'.format(check_column))
 
         # Check that last_version is not present in result_from_query
         if 'last_version' in self.which_columns():
             if update:
-                msgs.warning('`last_version` column already present')
+                print('`last_version` column already present')
             else:
-                msgs.warning('`last_version` column already present and it will not be updated')
+                print('`last_version` column already present and it will not be updated')
                 return
 
         # Get last versions
@@ -70,4 +68,3 @@ class ESOCatalogues(query.Query):
         self.result_from_query.add_column(MaskedColumn(data=last_version, name='last_version', dtype=bool,
                                                        description='True if this is the latest version of the catalog'))
         return
-

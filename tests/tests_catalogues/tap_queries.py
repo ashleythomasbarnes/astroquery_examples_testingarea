@@ -26,7 +26,9 @@ from pyvo.dal import DALQueryError
 from pyvo.dal import DALFormatError
 
 import default
-import msgs
+
+# Define default values
+default = default.Default()
 
 import numpy as np
 
@@ -56,7 +58,7 @@ def define_tap_service(which_tap_service):
 
     """
     if which_tap_service not in TAP_SERVICES:
-        msgs.error('{} not a valid entry for TAP services. Possibilities are: {}'.format(which_tap_service,
+        print('{} not a valid entry for TAP services. Possibilities are: {}'.format(which_tap_service,
                                                                                          TAP_SERVICES))
     tap_service = dal.tap.TAPService(default.get_value(which_tap_service))
     return tap_service
@@ -114,7 +116,7 @@ def run_query(tap_service, query, type_of_query, maxrec=default.get_value('maxre
 
     """
     if type_of_query not in TAP_QUERY_TYPES:
-        msgs.error('{} not a valid entry for the type of TAP query. Possibilities are: {}'.format(type_of_query,
+        print('{} not a valid entry for the type of TAP query. Possibilities are: {}'.format(type_of_query,
                                                                                                   TAP_QUERY_TYPES))
     # Obtaining query results and convert it to an astropy table
     if query is not None:
@@ -152,7 +154,7 @@ def run_query_sync(tap_service, query, maxrec=default.get_value('maxrec')):
     except (ValueError, DALQueryError, DALFormatError):
         msgs.warning('The query timed out. Trying with maxrec=100, but consider using `async` instead.')
         result_from_query = tap_service.search(query=query, maxrec=100).to_table()
-        # msgs.error('The query failed. Trying `async` instead.')
+        # print('The query failed. Trying `async` instead.')
         # msgs.warning('The query timed out. Trying `async` instead')
         # result_from_query = run_query_async(tap_service=tap_service, query=query, maxrec=maxrec)
     return result_from_query

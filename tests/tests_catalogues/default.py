@@ -1,72 +1,40 @@
+r""" Load default values
+"""
+
+import pkg_resources
 import os
 
+
 class Default:
-    """
-    A class to load and manage default values from a configuration file.
-
-    This version is independent of ESOAsg and allows users to specify any file path.
+    r"""Set default values for the ESOAsg module
     """
 
-    def __init__(self, file_path="default.txt"):
-        """
-        Initializes the Default class and loads values from a given file.
-
-        Parameters
-        ----------
-        file_path : str, optional
-            The path to the default values file (default is 'default.txt').
-        """
+    def __init__(self):
         self.default_dict = {}
-        self.file_path = file_path  # Store the file path
         self._load_from_file()
 
     def _load_from_file(self):
-        """
-        Loads default values from the specified file into a dictionary.
+        r"""Load default dict with values in default.txt
 
-        Only reads lines that are not empty and do not start with '#'.
-        Expected format: key==value (or key::value after processing).
         """
-        if not os.path.exists(self.file_path):
-            raise FileNotFoundError(f"Default file not found: {self.file_path}")
-
-        with open(self.file_path, "r", encoding="utf-8") as f:
-            default_list = [
-                line.strip().replace("==", "::")
-                for line in f
-                if not line.strip().startswith("#") and line.strip() != ""
-            ]
+        # default_file = pkg_resources.resource_filename('ESOAsg', 'default.txt')
+        default_file = os.path.join(os.path.dirname(__file__), "default.txt")
+        default_list = [line.strip().replace('==', '::')
+                        for line in open(default_file) if not line.strip().startswith('#') and line.strip() != '']
 
         for default in default_list:
-            try:
-                default_quantity, default_value = default.split("::", 1)
-                self.default_dict[default_quantity.strip()] = default_value.strip()
-            except ValueError:
-                print(f"Warning: Skipping malformed line in {self.file_path}: {default}")
+            default_quantity, default_value = default.split('::')
+            self.default_dict[default_quantity] = default_value
 
-    def get_value(self, card_name):
+    def get_value(self, card_name):  # written by Ema 05.03.2020
+        r""" Gets the default value from the parameter: card_name
+        Args:
+            card_name (`str`):
+        Returns:
+            the default value of `card_name`. If not existing an error is raised
         """
-        Retrieves the default value associated with a given key.
-
-        Parameters
-        ----------
-        card_name : str
-            The key whose default value is needed.
-
-        Returns
-        -------
-        str
-            The default value of `card_name`.
-
-        Raises
-        ------
-        ValueError
-            If the key does not exist in the dictionary.
-        """
-        if not isinstance(card_name, str):
-            raise TypeError(f"Expected a string key, got {type(card_name)} instead.")
-
+        assert isinstance(card_name, str), '{} not in string format'.format(card_name)
         if card_name in self.default_dict:
             return self.default_dict[card_name]
         else:
-            raise ValueError(f"Key '{card_name}' not found in the default dictionary.")
+            raise ValueError('{} Key not present in the default dictionary'.format(card_name))

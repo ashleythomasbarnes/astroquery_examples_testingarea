@@ -1,4 +1,3 @@
-import msgs
 import cleaning_lists
 import tap_queries
 
@@ -22,12 +21,13 @@ class Query:
         self.result_from_query = result_from_query
         self.maxrec = maxrec
         if type_of_query not in tap_queries.TAP_QUERY_TYPES:
-            msgs.warning('{} not a valid entry for the type of TAP query. Possibilities are: {}'.format(
+            print('{} not a valid entry for the type of TAP query. Possibilities are: {}'.format(
                 type_of_query, tap_queries.TAP_QUERY_TYPES))
-            msgs.warning('The `type_of_query` attribute will be set to `sync`')
+            print('The `type_of_query` attribute will be set to `sync`')
             self.type_of_query = 'sync'
         else:
             self.type_of_query = type_of_query
+
 
     def clean_query(self):
         r"""Set the `query` attribute to None
@@ -84,7 +84,7 @@ class Query:
             list_of_columns (`list`): List of all the names of the columns
         """
         if self.result_from_query is None:
-            msgs.warning('`result_from_query` is empty. You may want to run the query first')
+            print('`result_from_query` is empty. You may want to run the query first')
             list_of_columns = []
         else:
             list_of_columns = self.result_from_query.colnames

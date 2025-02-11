@@ -10,8 +10,8 @@ import os.path
 from astropy.io import fits
 
 # ESOAsg imports
-from ESOAsg import msgs
-from ESOAsg import default
+import msgs
+import default
 # from ESOAsg.core import fitsfiles
 
 # Only fits files with the following extensions are permitted
