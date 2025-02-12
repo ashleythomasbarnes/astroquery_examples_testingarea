@@ -1,26 +1,3 @@
-r"""Module to create and run TAP queries
-
-The Table Access Protocol (TAP) is a web-service protocol that gives access to collections of tabular data referred to
-collectively as a `tableset`. TAP services accept queries posed against the `tableset` available via the service and
-return the query response as another table, in accord with the relational model. Queries to the ESO TAP services are
-submitted using the Astronomical Data Query Language ADQL [O08]_.
-
-Currently, ESOAsg offers two TAP services:
-
-* `eso_tap_obs`: to query both the database tables describing the observed raw and reduced data obtained at the La
-  Silla Paranal Observatory, and the database table containing the ESO ambient conditions and meteorological
-  measurements (seeing, isoplanatic angle, precipitable water, turbulence profiles, etc.)
-
-* `eso_tap_cat`: to query the scientific catalogues provided by the principal investigators of ESO observing programmes
-
-More information on the ESO TAP service are at `this web-page
-<http://archive.eso.org/cms/eso-data/programmatic-access.html>`_ and some examples are given in `these notebooks
-<http://archive.eso.org/programmatic/HOWTO/>`_
-
-.. [O08] Oritz et al., (2008) `IVOA Astronomical Data Query Language <http://www.ivoa.net/documents/latest/ADQL.html>`_
-
-"""
-
 from pyvo import dal
 from pyvo.dal import DALQueryError
 from pyvo.dal import DALFormatError
@@ -30,16 +7,25 @@ import default
 # Define default values
 default = default.Default()
 
-import numpy as np
+#################################
+## SETUP
+#################################
 
 # currently supported tap services
 TAP_SERVICES = ['eso_tap_cat', 'eso_tap_obs']
+
 # type of queries currently allowed
 TAP_QUERY_TYPES = ['sync', 'async']
-# list of columns that will be queried in
-COLUMNS_FROM_OBSCORE = ['target_name', 'dp_id', 's_ra', 's_dec', 't_exptime', 'em_min', 'em_max', 'dataproduct_type',
-                        'instrument_name', 'obstech', 'abmaglim', 'proposal_id', 'obs_collection']
 
+# list of columns that will be queried in
+COLUMNS_FROM_OBSCORE = ['target_name', 'dp_id', 's_ra', 's_dec', 
+                        't_exptime', 'em_min', 'em_max', 'dataproduct_type',
+                        'instrument_name', 'obstech', 'abmaglim', 'proposal_id', 
+                        'obs_collection']
+
+#################################
+## SETUP TAP
+#################################
 
 def define_tap_service(which_tap_service):
     r"""Load a Table Access Protocol (TAP) service from defaults
@@ -63,27 +49,6 @@ def define_tap_service(which_tap_service):
     tap_service = dal.tap.TAPService(default.get_value(which_tap_service))
     return tap_service
 
-
-def print_query(query):
-    r"""Print the query on the terminal
-
-    In case the `query` is empty, a warning is raised
-
-    Args:
-        query (str): String containing the query
-
-    Returns:
-          None
-
-    """
-    if query is None:
-        msgs.warning('The query is empty')
-    else:
-        msgs.info('The query is:')
-        msgs.info('{}'.format(query))
-    return
-
-
 def which_service(tap_service):
     r"""Print a summary description of the TAP service used
 
@@ -94,10 +59,9 @@ def which_service(tap_service):
         None
 
     """
-    msgs.info('The TAP service used is:')
+    print('The TAP service used is:')
     tap_service.describe()
     return
-
 
 def run_query(tap_service, query, type_of_query, maxrec=default.get_value('maxrec')):
     r"""Run query to TAP service and return result as an `astropy.Table`
@@ -125,10 +89,14 @@ def run_query(tap_service, query, type_of_query, maxrec=default.get_value('maxre
         else:
             result_from_query = run_query_async(tap_service, query, maxrec=maxrec)
     else:
-        msgs.warning('Empty query provided')
+        print('Empty query provided')
         result_from_query = None
     return result_from_query
 
+
+#################################
+## RUN QUERY FUNCTIONS 
+#################################
 
 def run_query_sync(tap_service, query, maxrec=default.get_value('maxrec')):
     r"""Run a synchronous query to TAP service and return result as an `astropy.Table`
@@ -152,10 +120,10 @@ def run_query_sync(tap_service, query, maxrec=default.get_value('maxrec')):
             result_from_query = tap_service.search(query=query, maxrec=int(maxrec)).to_table()
 
     except (ValueError, DALQueryError, DALFormatError):
-        msgs.warning('The query timed out. Trying with maxrec=100, but consider using `async` instead.')
+        print('The query timed out. Trying with maxrec=100, but consider using `async` instead.')
         result_from_query = tap_service.search(query=query, maxrec=100).to_table()
         # print('The query failed. Trying `async` instead.')
-        # msgs.warning('The query timed out. Trying `async` instead')
+        # print('The query timed out. Trying `async` instead')
         # result_from_query = run_query_async(tap_service=tap_service, query=query, maxrec=maxrec)
     return result_from_query
 
@@ -177,17 +145,22 @@ def run_query_async(tap_service, query, maxrec=default.get_value('maxrec')):
     tap_job.run()
     # Wait for Executing
     tap_job.wait(phases=["EXECUTING", "ERROR", "ABORTED"], timeout=10.)
-    msgs.info('The query to the tap_service is in the status: {}'.format(str(tap_job.phase)))
+    print('The query to the tap_service is in the status: {}'.format(str(tap_job.phase)))
     # Wait for Completed
     tap_job.wait(phases=["COMPLETED", "ERROR", "ABORTED"], timeout=10.)
-    msgs.info('The query to the tap_service is in the status: {}'.format(str(tap_job.phase)))
+    print('The query to the tap_service is in the status: {}'.format(str(tap_job.phase)))
     # Fetch the results
     tap_job.raise_if_error()
     return tap_job.fetch_result().to_table()
 
-# Query builders:
 
-# General
+#############################################
+# QUERY BUILDERS 
+##############################################
+
+#################################
+## GENERAL FUNCTIONS
+#################################
 
 
 def _create_comma_separated_list(list_of_strings):
@@ -213,8 +186,28 @@ def _create_comma_separated_list(list_of_strings):
     return final_string
 
 
-# Catalogues:
+def print_query(query):
+    r"""Print the query on the terminal
 
+    In case the `query` is empty, a warning is raised
+
+    Args:
+        query (str): String containing the query
+
+    Returns:
+          None
+
+    """
+    if query is None:
+        print('The query is empty')
+    else:
+        print('The query is:')
+        print('{}'.format(query))
+    return
+
+#################################
+## CATALOGUES FUNCTIONS
+#################################
 
 def create_query_all_catalogues(all_versions=False, collections=None, tables=None):
     r"""Create TAP query that returns info on all catalogues in the ESO archive
@@ -387,131 +380,8 @@ def condition_source_ids_like(source_ids, source_id_name='SOURCEID'):
                 )'''
     return condition_source_ids
 
-# Observations
-
-
-def create_query_obscore_base(top=None, columns=None):
-    r"""Create the base string for a query to `ivoa.ObsCore`
-
-    If `columns` is set to None, default list of columns is set by the global variable `COLUMNS_FROM_OBSCORE`
-
-    Args:
-        columns (list, optional): list of `str` containing the columns that will be queried
-
-    Returns:
-        str: Base for the `ivoa.ObsCore` queries
-
-    """
-
-    if columns is None:
-        columns = COLUMNS_FROM_OBSCORE
-
-    if top is not None:
-        query_base = '''
-            SELECT TOP {}
-                {}
-            FROM
-                ivoa.ObsCore'''.format(top, _create_comma_separated_list(columns))
-
-    else: 
-        query_base = '''
-                SELECT
-                    {}
-                FROM
-                    ivoa.ObsCore'''.format(_create_comma_separated_list(columns))
-    return query_base
-
-
-def create_query_obscore_all_columns():
-    r"""Create a query that get names (and corresponding info) of the columns present `ivoa.ObsCore`
-
-    Returns:
-        str: string containing the query to obtain information on all columns present in `ivoa.ObsCore`
-
-    """
-    query_obscore_all_columns = '''
-        SELECT 
-            table_name, column_name, ucd, datatype, description, unit, utype
-        FROM 
-            TAP_SCHEMA.columns
-        WHERE 
-            table_name='ivoa.ObsCore' '''
-    return query_obscore_all_columns
-
-def condition_contains_ra_dec(ra, dec, radius=None, catalogue=True, ra_name='ra', dec_name='dec'):
-    r"""Create the WHERE CONTAINS condition string for a query with usage in obs or cat
-
-    Args:
-        ra (float): RA of the target in degrees and in the ICRS system
-        dec (float): Dec of the target in degrees and in the ICRS system
-        radius (float, optional): Search radius in arcsec. 
-
-    Returns:
-        str: String containing the WHERE INTERSECT condition for a query
-
-    """
-
-    if catalogue:
-        query_intersects_ra_dec = '''
-            WHERE
-                CONTAINS(point('', {0}, {1}), CIRCLE('ICRS',{2},{3},{4})) = 1'''.format(ra_name,
-                                                                                      dec_name, 
-                                                                                    str(ra),
-                                                                                    str(dec),
-                                                                                    str(radius/3600.))
-    else: 
-        query_intersects_ra_dec = '''
-            WHERE
-                CONTAINS(s_region,CIRCLE('ICRS',{0},{1},{2})) = 1'''.format(str(ra),
-                                                                                    str(dec),
-                                                                                    str(radius/3600.))
-    return query_intersects_ra_dec
-
-def condition_intersects_ra_dec(ra, dec, radius=None):
-    r"""Create the WHERE INTERSECTS condition string for a query
-
-    Args:
-        ra (float): RA of the target in degrees and in the ICRS system
-        dec (float): Dec of the target in degrees and in the ICRS system
-        radius (float, optional): Search radius in arcsec. If set to `None` no radius will be considered in the
-            INTERSECT condition
-
-    Returns:
-        str: String containing the WHERE INTERSECT condition for a query
-
-    """
-    if radius is None:
-        query_intersects_ra_dec = '''
-            WHERE
-                INTERSECTS(POINT('ICRS',{0},{1}), s_region) = 1'''.format(str(ra),
-                                                                          str(dec))
-    else:
-        query_intersects_ra_dec = '''
-            WHERE
-                INTERSECTS(s_region,CIRCLE('ICRS',{0},{1},{2}/3600.)) = 1'''.format(str(ra),
-                                                                                    str(dec),
-                                                                                    str(radius))
-    return query_intersects_ra_dec
-
-
-def condition_intersects_polygon(polygon):
-    r"""Create the WHERE INTERSECTS polygon condition string for a query
-
-    Args:
-        polygon (str): coordinates of the vertices of the polygon in the sky
-
-    Returns:
-        str: String containing the WHERE INTERSECT condition for a query
-
-    """
-    query_intersects_polygon = '''
-            WHERE
-                INTERSECTS(s_region,POLYGON('', {0} )) = 1'''.format(polygon)
-    return query_intersects_polygon
-
 
 # Conditions
-
 # ToDo, these can be compacted in one single function
 
 
@@ -621,81 +491,6 @@ def condition_collections_like(collections=None):
     # remove the last OR
     condition_collections = condition_collections[:-3]
     return condition_collections
-
-def condition_em_like(em_min=None, em_max=None, enclosed=True):
-    r"""Create condition string to select only specific em_min and em_max in `ivoa.ObsCore`
-
-    Args:
-        em_min (float): limit the search to the selected list of em_min (e.g., `>1000`)
-        em_max (float): limit the search to the selected list of em_max (e.g., `<10000`)
-        enclosed (bool): if set to `True` the condition will be `em_min > em_min` and `em_max < em_max`, otherwise
-            the condition will be `em_min < em_min` and `em_max > em_max`
-
-    Returns:
-        str: string containing the `em_min` and `em_max` condition for a query
-
-    """
-
-    condition_em = ''''''
-    if enclosed: 
-
-        if em_min is not None:
-            condition_em += f'''
-                AND 
-                    em_min>{em_min}'''
-            
-        if em_max is not None:
-            condition_em += f'''
-                AND 
-                    em_max<{em_max}'''
-    else:
-        if em_min is not None:
-            condition_em += f'''
-                AND 
-                    em_min<{em_min}'''
-            
-        if em_max is not None:
-            condition_em += f'''
-                AND 
-                    em_max>{em_max}'''
-        
-    return condition_em
-
-def condition_snr_like(snr=None):
-    r"""Create condition string to select only specific snr in `ivoa.ObsCore`
-
-    Args:
-        snr (list): limit the search to the selected list of snr (e.g., `>10`)
-
-    Returns:
-        str: string containing the `snr` condition for a query
-
-    """
-    condition_snr = ''''''
-    if snr is not None:
-        condition_snr = f'''
-            AND 
-                snr>{snr}'''
-        
-    return condition_snr
-
-def condition_em_res_power_like(em_res_power=None):
-    r"""Create condition string to select only specific em_res_power in `ivoa.ObsCore`
-
-    Args:
-        em_res_power (list): limit the search to the selected list of em_res_power (e.g., `>1000`)
-
-    Returns:
-        str: string containing the `em_res_power` condition for a query
-
-    """
-    condition_em_res_power = ''''''
-    if em_res_power is not None:
-        condition_em_res_power = f'''
-            AND 
-                em_res_power>{em_res_power}'''
-        
-    return condition_em_res_power
 
 def condition_order_by_like(order_by=None, order='ascending'):
     r"""Create condition string to select only specific order_by in `ivoa.ObsCore`

@@ -3,7 +3,6 @@ import tap_queries
 
 __all__ = ['Query']
 
-
 class Query:
     r"""Base class that dictate the general behaviour of a query
 
