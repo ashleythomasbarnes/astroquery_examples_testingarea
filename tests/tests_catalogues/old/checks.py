@@ -11,7 +11,7 @@ from astropy.io import fits
 
 # ESOAsg imports
 import msgs
-import default
+import old.default as default
 # from ESOAsg.core import fitsfiles
 
 # Only fits files with the following extensions are permitted

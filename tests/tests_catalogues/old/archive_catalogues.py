@@ -4,9 +4,9 @@ from astropy import coordinates
 from astropy.coordinates import ICRS
 
 import msgs
-import cleaning_lists
-import tap_queries
-import query_catalogues
+import old.cleaning_lists as cleaning_lists
+import old.tap_queries as tap_queries
+import old.query_catalogues as query_catalogues
 
 
 def all_catalogues_info(all_versions=False, verbose=False):

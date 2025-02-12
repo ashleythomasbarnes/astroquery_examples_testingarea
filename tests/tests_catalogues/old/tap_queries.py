@@ -1,6 +1,6 @@
 from pyvo import dal
 from pyvo.dal import DALQueryError, DALFormatError
-import default
+import old.default as default
 
 # Initialize default values
 default = default.Default()

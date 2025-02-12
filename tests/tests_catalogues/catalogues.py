@@ -1,12 +1,7 @@
 import numpy as np
 from astropy.table import MaskedColumn
 
-import default
-import tap_queries
-import cleaning_lists
-
-# Initialize default values
-default = default.Default()
+import catalogues_utils as utils
 
 class ESOCatalogues:
     """
@@ -25,13 +20,13 @@ class ESOCatalogues:
 
     def __init__(self, query=None, result_from_query=None, type_of_query="sync", maxrec=None):
         """Initialize an ESO catalog query with default TAP service settings."""
-        self.tap_service = tap_queries.define_tap_service("eso_tap_cat")
+        self.tap_service = utils.define_tap_service("eso_tap_cat")
         self.query = query
         self.result_from_query = result_from_query
-        self.maxrec = maxrec or default.get_value("maxrec")
+        self.maxrec = maxrec or utils.MAXREC
 
         # Validate query type
-        if type_of_query not in tap_queries.TAP_QUERY_TYPES:
+        if type_of_query not in utils.TAP_QUERY_TYPES:
             print(f"Invalid TAP query type: {type_of_query}. Using 'sync' instead.")
             self.type_of_query = "sync"
         else:
@@ -45,20 +40,20 @@ class ESOCatalogues:
         Args:
             to_string (bool, optional): If True, converts columns in byte format to strings.
         """
-        self.result_from_query = tap_queries.run_query(self.tap_service, self.query, self.type_of_query, maxrec=self.maxrec)
+        self.result_from_query = utils.run_query(self.tap_service, self.query, self.type_of_query, maxrec=self.maxrec)
 
         # Convert bytes to strings if required
         if to_string and self.result_from_query is not None:
             for column_id in self.which_columns():
-                self.result_from_query[column_id].data[:] = cleaning_lists.from_bytes_to_string(self.result_from_query[column_id].data.data)
+                self.result_from_query[column_id].data[:] = utils.from_bytes_to_string(self.result_from_query[column_id].data.data)
 
     def print_query(self):
         """Print the current query."""
-        tap_queries.print_query(self.query)
+        utils.print_query(self.query)
 
     def which_service(self):
         """Return and describe the TAP service in use."""
-        return tap_queries.which_service(self.tap_service)
+        return utils.which_service(self.tap_service)
 
     def which_columns(self):
         """Return a list of column names in result_from_query."""
@@ -170,13 +165,13 @@ def get_catalogues(collections=None, tables=None, columns=None, type_of_query='s
         columns_in_table = _is_column_list_in_catalogues(columns, tables=table_name)
 
         # form query
-        query = "{0}{1}{2}".format(tap_queries.create_query_table_base(table_name, columns=columns_in_table, top=top),
-                                    tap_queries.conditions_dict_like(conditions_dict),
-                                    tap_queries.condition_order_by_like(order_by, order))
+        query = "{0}{1}{2}".format(utils.create_query_table_base(table_name, columns=columns_in_table, top=top),
+                                    utils.conditions_dict_like(conditions_dict),
+                                    utils.condition_order_by_like(order_by, order))
 
         # Print query
         if verbose: 
-            tap_queries.print_query(query)
+            utils.print_query(query)
 
         # instantiate ESOcatalogues
         query_table = ESOCatalogues(query=query,
@@ -259,7 +254,7 @@ def catalogues_info(all_versions=False, collections=None, tables=None, verbose=F
 
     # Create a query for catalogues
     query_for_catalogues = ESOCatalogues(
-                                        query=tap_queries.create_query_all_catalogues(
+                                        query=utils.create_query_all_catalogues(
                                         all_versions=all_versions, collections=clean_collections, tables=clean_tables
         )
     )
@@ -344,7 +339,7 @@ def columns_info(collections=None, tables=None, verbose=False):
 
     # Create the query
     query_all_columns_info = ESOCatalogues(
-        query=tap_queries.create_query_all_columns(collections=clean_collections, tables=clean_tables)
+        query=utils.create_query_all_columns(collections=clean_collections, tables=clean_tables)
     )
 
     # Warn if both collections and tables are provided
@@ -372,7 +367,7 @@ def _is_collection_list_at_eso(collections):
     """
     assert collections is None or isinstance(collections, (str, list)), "`collections` must be None, str, or list"
 
-    collections_list = cleaning_lists.from_element_to_list(collections, element_type=str)
+    collections_list = utils.from_element_to_list(collections, element_type=str)
 
     return [c for c in collections_list if _is_collection_at_eso(c)] if collections_list else None
 
@@ -389,7 +384,7 @@ def _is_table_list_at_eso(tables):
     """
     assert tables is None or isinstance(tables, (str, list)), "`tables` must be None, str, or list"
 
-    tables_list = cleaning_lists.from_element_to_list(tables, element_type=str)
+    tables_list = utils.from_element_to_list(tables, element_type=str)
 
     return [t for t in tables_list if _is_table_at_eso(t)] if tables_list else None
 
@@ -578,7 +573,7 @@ def _is_column_list_in_catalogues(columns, collections=None, tables=None):
     assert isinstance(columns, (str, list)), "`columns` must be `None`, a `str`, or a `list`"
 
     # Convert single string column to a list
-    columns_list = cleaning_lists.from_element_to_list(columns, element_type=str)
+    columns_list = utils.from_element_to_list(columns, element_type=str)
 
     # Filter out invalid columns
     clean_columns = []
