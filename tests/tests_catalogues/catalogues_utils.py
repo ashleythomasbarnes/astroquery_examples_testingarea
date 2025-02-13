@@ -16,7 +16,7 @@ COLUMNS_FROM_OBSCORE = [
 ]
 
 # Maximum number of records to retrieve in a single query
-MAXREC = 20000
+MAXREC = 1000
 
 # Minimum disk space required for the query (Gb)
 MIN_DISK_SPACE = 6.00

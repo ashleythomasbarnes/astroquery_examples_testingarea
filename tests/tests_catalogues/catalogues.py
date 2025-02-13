@@ -143,6 +143,7 @@ def get_catalogues(collections=None, tables=None, columns=None, type_of_query='s
             value is set by the limit of the service.
         verbose (bool): if set to `True` additional info will be displayed
         conditions_dict (dict): dictionary containing the conditions to be applied to the query
+            Only currently supported is "=" condition, e.g. ID = 1234 - WORK IN PROGRESS
         top (int): number of top rows to be returned
         order_by (str): column name to be used to order the query
         order (str): order of the query (ascending or descending)
@@ -155,11 +156,17 @@ def get_catalogues(collections=None, tables=None, columns=None, type_of_query='s
     clean_tables = _is_collection_and_table_list_at_eso(collections=collections, tables=tables,
                                                         all_versions=all_versions)
 
-    # if maxrec is set to None, the entire length of the catalogue is considered:
-    maxrec_list = _get_catalogue_length_from_tables(clean_tables, maxrec=maxrec, all_versions=all_versions)
+    # get total number of records for each table
+    totrec_list = _get_catalogue_length_from_tables(clean_tables, maxrec=None, all_versions=all_versions)
+
+    # if maxrec is set to None, the utils.MAXREC is used
+    if maxrec is None:
+        maxrec_list = [utils.MAXREC] * len(totrec_list)
+    else: 
+        maxrec_list = [maxrec]
 
     list_of_catalogues = []
-    for table_name, maxrec_for_table in zip(clean_tables, maxrec_list):
+    for table_name, totrec_for_table, maxrec_for_table in zip(clean_tables, totrec_list, maxrec_list):
 
         # test for columns
         columns_in_table = _is_column_list_in_catalogues(columns, tables=table_name)
@@ -181,8 +188,9 @@ def get_catalogues(collections=None, tables=None, columns=None, type_of_query='s
         query_table.run_query(to_string=True)
         catalogue = query_table.get_result_from_query()
         list_of_catalogues.append(catalogue)
-        print('The query to {} returned {} entries (with a limit set to maxrec={})'.format(table_name,
+        print('The query to {} returned {} entries out of {} (with a limit set to maxrec={})'.format(table_name,
                                                                                                len(catalogue),
+                                                                                               totrec_for_table,
                                                                                                maxrec_for_table))
     if len(list_of_catalogues) == 0:
         return None
