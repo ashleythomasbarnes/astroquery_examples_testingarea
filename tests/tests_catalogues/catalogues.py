@@ -1,197 +1,177 @@
 import numpy as np
 from astropy.table import MaskedColumn
+from pyvo import dal
+from pyvo.dal import DALQueryError, DALFormatError
 
-import catalogues_utils as utils
+# =============================================================================
+# Constants
+# =============================================================================
+TAP_SERVICE_URL = "https://archive.eso.org/tap_cat"
+TAP_QUERY_TYPES = ["sync", "async"]
+MAXREC = 1000
 
-class ESOCatalogues:
+# =============================================================================
+# Public API Functions
+# =============================================================================
+
+def list_catalogues(all_versions=False, collections=None, tables=None, verbose=False):
     """
-    Class for querying ESO scientific catalogues via TAP services.
-
-    This class provides a standardized interface for querying the ESO archive,
-    supporting both synchronous ('sync') and asynchronous ('async') queries.
-
-    Attributes:
-        tap_service (pyvo.dal.tap.TAPService): TAP service for querying ESO catalogues.
-        query (str): The query string.
-        type_of_query (str): Type of query ('sync' or 'async').
-        maxrec (int, optional): Maximum number of entries returned by the query.
-        result_from_query (astropy.table.Table): The result of the query.
-    """
-
-    def __init__(self, query=None, result_from_query=None, type_of_query="sync", maxrec=None):
-        """Initialize an ESO catalog query with default TAP service settings."""
-        self.tap_service = utils.define_tap_service("eso_tap_cat")
-        self.query = query
-        self.result_from_query = result_from_query
-        self.maxrec = maxrec or utils.MAXREC
-
-        # Validate query type
-        if type_of_query not in utils.TAP_QUERY_TYPES:
-            print(f"Invalid TAP query type: {type_of_query}. Using 'sync' instead.")
-            self.type_of_query = "sync"
-        else:
-            self.type_of_query = type_of_query
-
-    # Query Execution Methods
-    def run_query(self, to_string=True):
-        """
-        Execute the query and store results in result_from_query.
-
-        Args:
-            to_string (bool, optional): If True, converts columns in byte format to strings.
-        """
-        self.result_from_query = utils.run_query(self.tap_service, self.query, self.type_of_query, maxrec=self.maxrec)
-
-        # Convert bytes to strings if required
-        if to_string and self.result_from_query is not None:
-            for column_id in self.which_columns():
-                self.result_from_query[column_id].data[:] = utils.from_bytes_to_string(self.result_from_query[column_id].data.data)
-
-    def print_query(self):
-        """Print the current query."""
-        utils.print_query(self.query)
-
-    def which_service(self):
-        """Return and describe the TAP service in use."""
-        return utils.which_service(self.tap_service)
-
-    def which_columns(self):
-        """Return a list of column names in result_from_query."""
-        if self.result_from_query is None:
-            print("No results found. Run the query first.")
-            return []
-        return self.result_from_query.colnames
-
-    def get_result_from_query(self):
-        """Return a copy of result_from_query."""
-        return self.result_from_query.copy() if self.result_from_query else None
-
-    def clean_query(self):
-        """Reset the query attribute to None."""
-        self.query = None
-
-    def clean_result_from_query(self):
-        """Reset the result_from_query attribute to None."""
-        self.result_from_query = None
-
-    # ESO-Specific Functionality
-    def set_last_version(self, update=True):
-        """
-        Adds a `last_version` column to result_from_query.
-
-        The `last_version` column is a boolean indicating whether a catalogue version is the latest.
-
-        Args:
-            update (bool, optional): If True, updates the column if it already exists.
-        """
-        required_columns = ["title", "version"]
-
-        # Ensure required columns exist
-        for col in required_columns:
-            if col not in self.which_columns():
-                print(f"Column '{col}' missing. `last_version` will not be created.")
-                return
-
-        # Prevent duplicate column creation
-        if "last_version" in self.which_columns():
-            print(f"'last_version' column already exists. {'Updating' if update else 'Skipping update'}.")
-            if not update:
-                return
-
-        # Determine latest versions
-        unique_titles = np.unique(self.result_from_query["title"].data).tolist()
-        last_version_flags = np.zeros_like(self.result_from_query["version"].data, dtype=bool)
-
-        for title in unique_titles:
-            latest_version = np.nanmax(self.result_from_query["version"].data[self.result_from_query["title"].data == title])
-            last_version_flags[(self.result_from_query["title"].data == title) & 
-                               (self.result_from_query["version"].data == latest_version)] = True
-
-        # Add column to table
-        self.result_from_query.add_column(
-            MaskedColumn(
-                data=last_version_flags,
-                name="last_version",
-                dtype=bool,
-                description="True if this is the latest version of the catalog"
-            )
-        )
-
-
-def query_catalogues(collections=None, tables=None, columns=None, type_of_query='sync', all_versions=False, maxrec=None, verbose=False,
-                   conditions_dict=None, top=None, order_by=None, order='ascending'):
-    r"""Query the ESO tap_cat service for specific catalogues
-
-    There are two ways to select the catalogues you are interested in. Either you select directly the table_name (or the
-    list of table_names) that you want to query, or you select a collection (or a list of collections). If you select
-    this latter option, what happens in the background is that the code is going to search for the table(s)
-    corresponding to the given collection and query them.
-
-    If you are asking for more than one table, the result will be listed in a list of `astropy.tables` with one element
-    per retrieved table
-
+    Retrieve a table with metadata about ESO catalogues.
+    
+    The returned table includes information such as collection, title, version,
+    table_name, instrument, telescope, publication_date, etc. In addition, the 
+    RA, Dec, and Source ID column names are added to each catalogue.
+    
     Args:
-        collections (any): list of `str` containing the names (or a single `str`) of the collections for
-            which the query will be limited
-        tables (any): list of `str` containing the table_name of the tables for which the query will be limited
-        columns (any): list of the `column_name` that you want to download. The full list of the columns in a
-            table can be found by running `list_catalogues_info()`
-        all_versions (bool): if set to `True` also obsolete versions of the catalogues are searched in case
-            `collections` is given
-        type_of_query (str): type of query to be run
-        maxrec (int, optional): define the maximum number of entries that a single query can return. If it is `None` the
-            value is set by the limit of the service.
-        verbose (bool): if set to `True` additional info will be displayed
-        conditions_dict (dict): dictionary containing the conditions to be applied to the query
-            Only currently supported is "=" condition, e.g. ID = 1234 - WORK IN PROGRESS
-        top (int): number of top rows to be returned
-        order_by (str): column name to be used to order the query
-        order (str): order of the query (ascending or descending)
-
+        all_versions (bool): If True, include obsolete catalogue versions.
+        collections (str or list): Filter results by collection name(s).
+        tables (str or list): Filter results by table name(s).
+        verbose (bool): If True, print additional query info.
+    
     Returns:
-        any: `astropy.table` or `list` of `astropy.tables` containing the queried catalogues
-
+        astropy.table.Table: Catalogue metadata table.
     """
-    # Obtain list of all tables derived from the merger of collections and tables
-    clean_tables = _is_collection_and_table_list_at_eso(collections=collections, tables=tables,
-                                                        all_versions=all_versions)
-
-    # get total number of records for each table
-    totrec_list = _get_catalogue_length_from_tables(clean_tables, maxrec=None, all_versions=all_versions)
-
-    # if maxrec is set to None, the utils.MAXREC is used
-    if maxrec is None:
-        maxrec_list = [utils.MAXREC] * len(totrec_list)
-    else: 
-        maxrec_list = [maxrec]
-
-    list_of_catalogues = []
-    for table_name, totrec_for_table, maxrec_for_table in zip(clean_tables, totrec_list, maxrec_list):
-
-        # test for columns
-        columns_in_table = _is_column_list_in_catalogues(columns, tables=table_name)
-
-        # form query
-        query = "{0}{1}{2}".format(utils.create_query_table_base(table_name, columns=columns_in_table, top=top),
-                                    utils.conditions_dict_like(conditions_dict),
-                                    utils.condition_order_by_like(order_by, order))
-
-        # Print query
-        if verbose: 
-            utils.print_query(query)
-
-        # instantiate ESOcatalogues
-        query_table = ESOCatalogues(query=query,
-                                    type_of_query=type_of_query, 
-                                    maxrec=maxrec_for_table)
+    clean_collections = _is_collection_list_at_eso(collections)
+    clean_tables = _is_table_list_at_eso(tables)
+    query = _create_query_all_catalogues(all_versions, clean_collections, clean_tables)
+    
+    if verbose:
+        _print_query(query)
+    
+    qobj = _ESOCatalogues(query=query)
+    if collections is not None and tables is not None:
+        print("Warning: Both `collections` and `tables` are set. Ensure this is the intended behavior.")
+    
+    qobj.run_query(to_string=True)
+    qobj.result.sort(["collection", "table_name", "version"])
+    qobj.set_last_version(update=True)
+    catalogues_table = qobj.get_result()
+    
+    # Add RA, Dec, and Source ID columns based on UCD tokens.
+    id_ra_dec_table = _get_id_ra_dec_from_columns(clean_collections)
+    source_id, ra_id, dec_id = [], [], []
+    for t_name in catalogues_table["table_name"]:
+        source_id_table = id_ra_dec_table[
+            (id_ra_dec_table["table_name"] == t_name) &
+            (id_ra_dec_table["ucd"] == "meta.id;meta.main")
+        ]["column_name"].tolist()
+        ra_id_table = id_ra_dec_table[
+            (id_ra_dec_table["table_name"] == t_name) &
+            (id_ra_dec_table["ucd"] == "pos.eq.ra;meta.main")
+        ]["column_name"].tolist()
+        dec_id_table = id_ra_dec_table[
+            (id_ra_dec_table["table_name"] == t_name) &
+            (id_ra_dec_table["ucd"] == "pos.eq.dec;meta.main")
+        ]["column_name"].tolist()
         
-        query_table.run_query(to_string=True)
-        catalogue = query_table.get_result_from_query()
+        source_id.append(source_id_table[0] if len(source_id_table) == 1 else None)
+        ra_id.append(ra_id_table[0] if len(ra_id_table) == 1 else None)
+        dec_id.append(dec_id_table[0] if len(dec_id_table) == 1 else None)
+    
+    catalogues_table.add_column(
+        MaskedColumn(data=np.asarray(ra_id), name="table_RA", dtype=str,
+                     description="Identifier for RA in the catalog")
+    )
+    catalogues_table.add_column(
+        MaskedColumn(data=np.asarray(dec_id), name="table_Dec", dtype=str,
+                     description="Identifier for Dec in the catalog")
+    )
+    catalogues_table.add_column(
+        MaskedColumn(data=np.asarray(source_id), name="table_ID", dtype=str,
+                     description="Identifier for Source ID in the catalog")
+    )
+    return catalogues_table
+
+
+def all_list_catalogues(all_versions=False, verbose=False):
+    """
+    Retrieve a master table with metadata on all ESO catalogues.
+    
+    This is equivalent to calling:
+        list_catalogues(all_versions=all_versions, collections=None, tables=None)
+    
+    Args:
+        all_versions (bool): If True, include obsolete catalogue versions.
+        verbose (bool): If True, print additional query information.
+    
+    Returns:
+        astropy.table.Table: Table containing metadata for all catalogues.
+    """
+    return list_catalogues(all_versions=all_versions, collections=None, tables=None, verbose=verbose)
+
+
+def list_catalogues_info(collections=None, tables=None, verbose=False):
+    """
+    Retrieve column metadata for the ESO catalogues.
+    
+    The returned table includes column name, UCD, datatype, description, and unit.
+    
+    Args:
+        collections (str or list): Filter by collection name(s).
+        tables (str or list): Filter by table name(s).
+        verbose (bool): If True, print additional query information.
+    
+    Returns:
+        astropy.table.Table: Table with column metadata.
+    """
+    clean_collections = _is_collection_list_at_eso(collections)
+    clean_tables = _is_table_list_at_eso(tables)
+    query = _create_query_all_columns(clean_collections, clean_tables)
+    
+    if verbose:
+        _print_query(query)
+    
+    qobj = _ESOCatalogues(query=query)
+    if collections is not None and tables is not None:
+        print("Warning: Both `collections` and `tables` are set. Ensure this is the intended behavior.")
+    qobj.run_query(to_string=True)
+    return qobj.get_result()
+
+
+def query_catalogues(collections=None, tables=None, columns=None, type_of_query='sync',
+                     all_versions=False, maxrec=None, verbose=False,
+                     conditions_dict=None, top=None, order_by=None, order='ascending'):
+    """
+    Query specific ESO catalogues from the TAP service.
+    
+    You can either supply a collection (or list of collections) or specific table names.
+    If both are provided, the conditions are combined (AND).
+    
+    Args:
+        collections (str or list): Collection name(s) to filter catalogues.
+        tables (str or list): Specific table name(s) to query.
+        columns (str or list): Column name(s) to retrieve.
+        type_of_query (str): 'sync' or 'async' query mode.
+        all_versions (bool): If True, include obsolete catalogue versions.
+        maxrec (int): Maximum number of rows to retrieve per query.
+        verbose (bool): If True, print query details.
+        conditions_dict (dict): Additional query conditions.
+        top (int): Return only the top N rows.
+        order_by (str): Column name for ordering the result.
+        order (str): Order direction ('ascending' or 'descending').
+    
+    Returns:
+        astropy.table.Table or list of Tables: The queried catalogue(s).
+    """
+    clean_tables = _is_collection_and_table_list_at_eso(collections, tables, all_versions=all_versions)
+    totrec_list = _get_catalogue_length_from_tables(clean_tables, maxrec=None, all_versions=all_versions)
+    maxrec_list = [maxrec] * len(totrec_list) if maxrec is not None else [MAXREC] * len(totrec_list)
+    
+    list_of_catalogues = []
+    for table_name, totrec, maxrec_val in zip(clean_tables, totrec_list, maxrec_list):
+        valid_columns = _is_column_list_in_catalogues(columns, tables=table_name)
+        query = _create_query_catalogues(table_name, valid_columns, conditions_dict, order_by, order, top)
+        
+        if verbose:
+            _print_query(query)
+        
+        qobj = _ESOCatalogues(query=query, type_of_query=type_of_query, maxrec=maxrec_val)
+        qobj.run_query(to_string=True)
+        catalogue = qobj.get_result()
         list_of_catalogues.append(catalogue)
-        print('The query to {} returned {} entries out of {} (with a limit set to maxrec={})'.format(table_name,
-                                                                                               len(catalogue),
-                                                                                               totrec_for_table,
-                                                                                               maxrec_for_table))
+        print(f"The query to {table_name} returned {len(catalogue)} entries out of {totrec} "
+              f"(with a limit set to maxrec={maxrec_val})")
+    
     if len(list_of_catalogues) == 0:
         return None
     elif len(list_of_catalogues) == 1:
@@ -199,416 +179,310 @@ def query_catalogues(collections=None, tables=None, columns=None, type_of_query=
     else:
         return list_of_catalogues
 
+# =============================================================================
+# Internal Implementation (hidden from the user)
+# =============================================================================
 
-def all_list_catalogues(all_versions=False, verbose=False):
+class _ESOCatalogues:
     """
-    Loads an `astropy.table.Table` containing information on all catalogues present in the ESO archive.
-
-    The returned table includes metadata about all available catalogues in the ESO archive, such as collection names, 
-    instruments, telescope details, publication dates, and available data formats.
-
-    The table contains the following columns:
-        - `collection`, `title`, `version`, `table_name`, `filter`, `instrument`, `telescope`, `publication_date`
-        - `description`, `number_rows`, `number_columns`, `rel_descr_url`, `acknowledgment`, `cat_id`, `mjd_obs`
-        - `mjd_end`, `skysqdeg`, `bibliography`, `document_id`, `from_column`, `target_table`, `target_column`
-        - `last_version`
-
-    **Note:** This is equivalent to running:
-    
-        >>> list_catalogues(collections=None, tables=None)
-    
-    The key difference is that, since no constraints are set, this function returns the **master table** 
-    containing all catalogues present in the ESO archive.
-
-    Args:
-        all_versions (bool, optional): If `True`, includes obsolete versions of the catalogues. Default is `False`.
-        verbose (bool, optional): If `True`, displays additional information during execution. Default is `False`.
-
-    Returns:
-        astropy.table.Table: A table containing metadata about all catalogues in the ESO archive.
+    Internal class to manage ESO TAP queries.
     """
-    return list_catalogues(all_versions=all_versions, collections=None, tables=None, verbose=verbose)
+    def __init__(self, query=None, type_of_query="sync", maxrec=None):
+        self.tap_service = _define_tap_service()
+        self.query = query
+        self.type_of_query = type_of_query if type_of_query in TAP_QUERY_TYPES else "sync"
+        self.maxrec = maxrec or MAXREC
+        self.result = None
 
+    def run_query(self, to_string=True):
+        """Execute the query and (optionally) convert byte columns to strings."""
+        self.result = _run_query(self.tap_service, self.query, self.type_of_query, self.maxrec)
+        if to_string and self.result is not None:
+            for col in self.result.colnames:
+                self.result[col].data[:] = _from_bytes_to_string(self.result[col].data.data)
 
-def list_catalogues(all_versions=False, collections=None, tables=None, verbose=False):
-    """
-    Retrieves an `astropy.table.Table` containing metadata about selected catalogues in the ESO archive.
+    def get_result(self):
+        """Return a copy of the query result."""
+        return self.result.copy() if self.result is not None else None
 
-    Users can filter catalogues by providing either a **list of collections** or a **list of table names**. 
-    If both `collections` and `tables` are set to `None`, the function returns metadata for **all ESO catalogues**.
+    def set_last_version(self, update=True):
+        """
+        Add a `last_version` column to the result table indicating whether 
+        a catalogue is the most recent version.
+        """
+        required_cols = ["title", "version"]
+        if self.result is None:
+            print("No results to update.")
+            return
+        for col in required_cols:
+            if col not in self.result.colnames:
+                print(f"Column '{col}' missing. Cannot create 'last_version'.")
+                return
+        if "last_version" in self.result.colnames and not update:
+            print("'last_version' already exists; skipping update.")
+            return
 
-    The output table contains the following columns:
-        - `collection`, `title`, `version`, `table_name`, `filter`, `instrument`, `telescope`, `publication_date`
-        - `description`, `number_rows`, `number_columns`, `rel_descr_url`, `acknowledgment`, `cat_id`, `mjd_obs`
-        - `mjd_end`, `skysqdeg`, `bibliography`, `document_id`, `from_column`, `target_table`, `target_column`
-        - `last_version`, `table_RA`, `table_Dec`, `table_ID`
+        unique_titles = np.unique(self.result["title"].data).tolist()
+        last_version_flags = np.zeros_like(self.result["version"].data, dtype=bool)
 
-    **Note:** If both `collections` and `tables` are provided, the conditions are **combined with an AND statement**, 
-    which may result in unexpected behavior. 
+        for title in unique_titles:
+            version_data = self.result["version"].data[self.result["title"].data == title]
+            latest_version = np.nanmax(version_data)
+            flag = (self.result["title"].data == title) & (self.result["version"].data == latest_version)
+            last_version_flags[flag] = True
 
-    Args:
-        all_versions (bool, optional): If `True`, includes obsolete versions of the catalogues. Default is `False`.
-        collections (str or list, optional): A collection name or list of collection names to filter results.
-        tables (str or list, optional): A table name or list of table names to filter results.
-        verbose (bool, optional): If `True`, displays additional query information. Default is `False`.
-
-    Returns:
-        astropy.table.Table: A table containing metadata about the selected catalogues.
-    """
-
-    # Validate collection and table inputs
-    clean_collections = _is_collection_list_at_eso(collections)
-    clean_tables = _is_table_list_at_eso(tables)
-
-    # Create a query for catalogues
-    query_for_catalogues = ESOCatalogues(
-                                        query=utils.create_query_all_catalogues(
-                                        all_versions=all_versions, collections=clean_collections, tables=clean_tables
+        self.result.add_column(
+            MaskedColumn(
+                data=last_version_flags,
+                name="last_version",
+                dtype=bool,
+                description="True if this is the latest version of the catalogue"
+            )
         )
-    )
 
-    # Warn if both collections and tables are provided
-    if collections is not None and tables is not None:
-        print("Warning: Both `collections` and `tables` are set. Ensure this is the intended behavior.")
+# -----------------------------------------------------------------------------
+# Internal helper functions
+# -----------------------------------------------------------------------------
 
-    # Print query if verbose mode is enabled
-    if verbose:
-        query_for_catalogues.print_query()
+def _define_tap_service():
+    """Instantiate and return the TAP service."""
+    return dal.tap.TAPService(TAP_SERVICE_URL)
 
-    # Execute the query
-    query_for_catalogues.run_query(to_string=True)
+def _run_query(tap_service, query, type_of_query, maxrec=MAXREC):
+    """Dispatch the query to the appropriate synchronous or asynchronous function."""
+    if type_of_query == "sync":
+        return _run_query_sync(tap_service, query, maxrec)
+    else:
+        return _run_query_async(tap_service, query, maxrec)
 
-    # Sort results by collection, table name, and version
-    query_for_catalogues.result_from_query.sort(["collection", "table_name", "version"])
+def _run_query_sync(tap_service, query, maxrec=MAXREC):
+    """Execute a synchronous TAP query."""
+    try:
+        return tap_service.search(query=query, maxrec=int(maxrec) if maxrec is not None else None).to_table()
+    except (ValueError, DALQueryError, DALFormatError):
+        print("Query timeout. Retrying with maxrec=100 (consider using async instead).")
+        return tap_service.search(query=query, maxrec=100).to_table()
 
-    # Mark the latest versions, redundant if `all_versions=True`
-    query_for_catalogues.set_last_version(update=True)
-    catalogues_table = query_for_catalogues.get_result_from_query()
+def _run_query_async(tap_service, query, maxrec=MAXREC):
+    """Execute an asynchronous TAP query."""
+    tap_job = tap_service.submit_job(query=query, maxrec=maxrec)
+    tap_job.run()
+    for status in ["EXECUTING", "COMPLETED", "ERROR", "ABORTED"]:
+        tap_job.wait(phases=[status], timeout=10.0)
+        print(f"Query status: {tap_job.phase}")
+    tap_job.raise_if_error()
+    return tap_job.fetch_result().to_table()
 
-    # Extract Source ID, RA, and Dec columns for all collections
-    id_ra_dec_table = _get_id_ra_dec_from_columns(collections=clean_collections)
+def _from_bytes_to_string(input_in_bytes):
+    """Convert byte strings to unicode strings."""
+    if isinstance(input_in_bytes, bytes):
+        return input_in_bytes.decode("utf-8")
+    if isinstance(input_in_bytes, np.ndarray) and input_in_bytes.dtype.type is np.bytes_:
+        return np.array([x.decode("utf-8") if isinstance(x, bytes) else x for x in input_in_bytes])
+    if isinstance(input_in_bytes, list):
+        return [x.decode("utf-8") if isinstance(x, bytes) else x for x in input_in_bytes]
+    return input_in_bytes
 
-    # Initialize lists for RA, Dec, and Source ID
-    source_id, ra_id, dec_id = [], [], []
-
-    # Iterate over tables to extract RA, Dec, and Source ID information
-    for t_name in catalogues_table["table_name"]:
-        source_id_table = id_ra_dec_table[
-            (id_ra_dec_table["table_name"] == t_name) & 
-            (id_ra_dec_table["ucd"] == "meta.id;meta.main")
-        ]["column_name"].tolist()
-
-        ra_id_table = id_ra_dec_table[
-            (id_ra_dec_table["table_name"] == t_name) & 
-            (id_ra_dec_table["ucd"] == "pos.eq.ra;meta.main")
-        ]["column_name"].tolist()
-
-        dec_id_table = id_ra_dec_table[
-            (id_ra_dec_table["table_name"] == t_name) & 
-            (id_ra_dec_table["ucd"] == "pos.eq.dec;meta.main")
-        ]["column_name"].tolist()
-
-        # Handle cases with multiple or missing columns
-        ra_id.append(ra_id_table[0] if len(ra_id_table) == 1 else None)
-        dec_id.append(dec_id_table[0] if len(dec_id_table) == 1 else None)
-        source_id.append(source_id_table[0] if len(source_id_table) == 1 else None)
-
-    # Add RA, Dec, and Source ID columns to the result table
-    catalogues_table.add_column(MaskedColumn(data=np.asarray(ra_id), name="table_RA", dtype=str,
-                                             description="Identifier for RA in the catalog"))
-    catalogues_table.add_column(MaskedColumn(data=np.asarray(dec_id), name="table_Dec", dtype=str,
-                                             description="Identifier for Dec in the catalog"))
-    catalogues_table.add_column(MaskedColumn(data=np.asarray(source_id), name="table_ID", dtype=str,
-                                             description="Identifier for Source ID in the catalog"))
-
-    return catalogues_table
-
-
-def list_catalogues_info(collections=None, tables=None, verbose=False):
+def _from_element_to_list(element, element_type=str):
     """
-    Queries the ESO archive for column metadata of selected collections or tables.
-
-    If `collections` and `tables` are both `None`, the function retrieves metadata for all collections 
-    and tables in the ESO archive.
-
-    Args:
-        collections (str or list, optional): A collection name or list of collections to filter results.
-        tables (str or list, optional): A table name or list of tables to filter results.
-        verbose (bool, optional): If `True`, displays additional query details.
-
-    Returns:
-        astropy.table.Table: A table containing metadata of all columns in the queried collection(s) or table(s).
-        The output includes:
-        - `table_name`, `column_name`, `ucd`, `datatype`, `description`, and `unit`
+    Ensure the input is a list of elements of a given type.
     """
-    # Validate inputs
-    clean_collections = _is_collection_list_at_eso(collections)
-    clean_tables = _is_table_list_at_eso(tables)
+    if element is None:
+        return None
+    if isinstance(element, list):
+        if all(isinstance(e, element_type) for e in element):
+            return element
+        else:
+            raise TypeError(f"All elements must be of type {element_type}")
+    if isinstance(element, np.ndarray):
+        lst = element.tolist()
+        if all(isinstance(e, element_type) for e in lst):
+            return lst
+        else:
+            raise TypeError(f"All elements must be of type {element_type}")
+    if isinstance(element, MaskedColumn):
+        lst = element.data.data.tolist()
+        if all(isinstance(e, element_type) for e in lst):
+            return lst
+        else:
+            raise TypeError(f"All elements must be of type {element_type}")
+    if isinstance(element, element_type):
+        return [element]
+    raise TypeError(f"Invalid type for: {element} (expected {element_type})")
 
-    # Create the query
-    query_all_columns_info = ESOCatalogues(
-        query=utils.create_query_all_columns(collections=clean_collections, tables=clean_tables)
-    )
+def _print_query(query):
+    """Print the query string."""
+    if query:
+        print(f"Query:\n{query}")
+    else:
+        print("The query is empty.")
 
-    # Warn if both collections and tables are provided
-    if collections is not None and tables is not None:
-        print("Warning: Both `collections` and `tables` are set. Ensure this is the intended behavior.")
+def _create_comma_separated_list(list_of_strings):
+    """Return a comma-separated string from a list (or '*' if None)."""
+    return ", ".join(list_of_strings) if list_of_strings else "*"
 
-    # Print query if verbose mode is enabled
-    if verbose:
-        query_all_columns_info.print_query()
+def _condition_collections_like(collections):
+    """Generate a SQL-like condition for collections."""
+    cols = _from_element_to_list(collections, str) if collections is not None else ["%"]
+    return " OR ".join(f"collection LIKE '{col}'" for col in cols)
 
-    # Execute the query
-    query_all_columns_info.run_query(to_string=True)
+def _condition_tables_like(tables):
+    """Generate a SQL-like condition for tables."""
+    tabs = _from_element_to_list(tables, str) if tables is not None else ["%"]
+    return " OR ".join(f"table_name LIKE '{tab}'" for tab in tabs)
 
-    return query_all_columns_info.get_result_from_query()
+def _condition_order_by_like(order_by, order="ascending"):
+    """Generate an ORDER BY clause if needed."""
+    return f" ORDER BY {order_by} {order.upper()}" if order_by else ""
 
-def _is_collection_list_at_eso(collections):
+def _conditions_dict_like(conditions_dict):
+    """Generate a WHERE clause from a dictionary of conditions."""
+    if conditions_dict:
+        return " ".join(f"WHERE {key}={value}" for key, value in conditions_dict.items())
+    return ""
+
+def _create_query_all_catalogues(all_versions, collections, tables):
+    """Build the TAP query for retrieving catalogue metadata."""
+    query = """
+        SELECT 
+            collection, title, version, table_name, filter, instrument, telescope, publication_date, 
+            ref.description AS description, number_rows, number_columns, rel_descr_url, acknowledgment,
+            cat_id, mjd_obs, mjd_end, skysqdeg, bibliography, document_id, kc.from_column AS from_column,
+            k.target_table AS target_table, kc.target_column AS target_column, schema_name
+        FROM TAP_SCHEMA.tables AS ref
+        LEFT OUTER JOIN TAP_SCHEMA.keys AS k ON ref.table_name = k.from_table 
+        LEFT OUTER JOIN TAP_SCHEMA.key_columns AS kc ON k.key_id = kc.key_id
+        WHERE schema_name = 'safcat'
     """
-    Checks if a given list of collections is present in the ESO archive.
+    if not all_versions:
+        query += """
+        AND cat_id IN (
+            SELECT t1.cat_id 
+            FROM TAP_SCHEMA.tables t1
+            LEFT JOIN TAP_SCHEMA.tables t2 ON (t1.title = t2.title AND t1.version < t2.version)
+            WHERE t2.title IS NULL
+        )
+        """
+    if collections:
+        query += f" AND ({_condition_collections_like(collections)})"
+    if tables:
+        query += f" AND ({_condition_tables_like(tables)})"
+    return query
 
-    Args:
-        collections (str or list, optional): A single collection name or a list of collection names.
-
-    Returns:
-        list: A filtered list containing only valid collections present in the ESO archive.
+def _create_query_all_columns(collections, tables):
+    """Build the TAP query for retrieving column metadata."""
+    return f"""
+        SELECT table_name, column_name, ucd, datatype, description, unit
+        FROM TAP_SCHEMA.columns
+        WHERE table_name IN (
+            SELECT table_name FROM TAP_SCHEMA.tables WHERE {_condition_collections_like(collections)}
+        )
+        AND ({_condition_tables_like(tables)})
     """
-    assert collections is None or isinstance(collections, (str, list)), "`collections` must be None, str, or list"
 
-    collections_list = utils.from_element_to_list(collections, element_type=str)
+def _create_query_catalogues(table_name, columns, conditions_dict, order_by, order, top):
+    """Build the TAP query for a specific catalogue table."""
+    base = _create_query_table_base(table_name, columns, top)
+    cond = _conditions_dict_like(conditions_dict)
+    order_clause = _condition_order_by_like(order_by, order)
+    return f"{base} {cond} {order_clause}"
 
-    return [c for c in collections_list if _is_collection_at_eso(c)] if collections_list else None
-
-
-def _is_table_list_at_eso(tables):
-    """
-    Checks if a given list of table names is present in the ESO archive.
-
-    Args:
-        tables (str or list, optional): A single table name or a list of table names.
-
-    Returns:
-        list: A filtered list containing only valid tables present in the ESO archive.
-    """
-    assert tables is None or isinstance(tables, (str, list)), "`tables` must be None, str, or list"
-
-    tables_list = utils.from_element_to_list(tables, element_type=str)
-
-    return [t for t in tables_list if _is_table_at_eso(t)] if tables_list else None
-
+def _create_query_table_base(table_name, columns, top):
+    """Build the basic SELECT ... FROM ... part of a query."""
+    select_clause = f"SELECT {'TOP ' + str(top) + ' ' if top else ''}{_create_comma_separated_list(columns)}"
+    return f"{select_clause} FROM {table_name}"
 
 def _is_collection_at_eso(collection):
-    """
-    Checks if a given collection exists in the ESO archive.
-
-    Args:
-        collection (str): The collection name to check.
-
-    Returns:
-        bool: True if the collection exists, False otherwise (with a warning message).
-    """
-    table_all_catalogues = all_list_catalogues(verbose=False, all_versions=False)
-    all_collections_list = np.unique(table_all_catalogues["collection"].data.data).tolist()
-
-    if collection not in all_collections_list:
-        print(f"Warning: Collection '{collection}' not recognized. Possible values:\n{all_collections_list}")
+    """Check if the collection exists in the ESO archive."""
+    table = all_list_catalogues(all_versions=False, verbose=False)
+    all_cols = np.unique(table["collection"].data.data).tolist()
+    if collection not in all_cols:
+        print(f"Warning: Collection '{collection}' not recognized. Possible values:\n{all_cols}")
         return False
-
     return True
-
 
 def _is_table_at_eso(table_name):
-    """
-    Checks if a given table exists in the ESO archive.
-
-    Args:
-        table_name (str): The table name to check.
-
-    Returns:
-        bool: True if the table exists, False otherwise (with a warning message).
-    """
-    table_all_catalogues = all_list_catalogues(verbose=False, all_versions=True)
-    all_table_list = table_all_catalogues["table_name"].data.data.tolist()
-    last_version_list = table_all_catalogues["last_version"].data.data.tolist()
-
-    if table_name not in all_table_list:
-        print(f"Warning: Table '{table_name}' not recognized. Possible values:\n{all_table_list}")
+    """Check if the table exists (and if it is the latest version)."""
+    table = all_list_catalogues(all_versions=True, verbose=False)
+    all_tables = table["table_name"].data.data.tolist()
+    last_versions = table["last_version"].data.data.tolist()
+    if table_name not in all_tables:
+        print(f"Warning: Table '{table_name}' not recognized. Possible values:\n{all_tables}")
         return False
-
-    if not last_version_list[all_table_list.index(table_name)]:
-        print(f"Warning: '{table_name}' is not the most recent version of the queried catalogue.")
-
+    if not last_versions[all_tables.index(table_name)]:
+        print(f"Warning: '{table_name}' is not the most recent version of the catalogue.")
     return True
 
+def _is_collection_list_at_eso(collections):
+    """Ensure the collections input is valid and filter to known collections."""
+    if collections is None:
+        return None
+    collections_list = _from_element_to_list(collections, str)
+    return [c for c in collections_list if _is_collection_at_eso(c)]
+
+def _is_table_list_at_eso(tables):
+    """Ensure the tables input is valid and filter to known tables."""
+    if tables is None:
+        return None
+    tables_list = _from_element_to_list(tables, str)
+    return [t for t in tables_list if _is_table_at_eso(t)]
+
+def _get_tables_from_collection(collection, all_versions=False):
+    """Retrieve table names for a given collection."""
+    if not _is_collection_at_eso(collection):
+        return []
+    table_all = all_list_catalogues(all_versions=all_versions, verbose=False)
+    if table_all is None or "table_name" not in table_all.colnames:
+        return []
+    return table_all[table_all["collection"].data == collection]["table_name"].tolist()
+
+def _is_collection_and_table_list_at_eso(collections, tables, all_versions=False):
+    """Merge valid table names from collections and explicit table inputs."""
+    clean_collections = _is_collection_list_at_eso(collections)
+    clean_tables = _is_table_list_at_eso(tables) or []
+    if clean_collections:
+        for coll in clean_collections:
+            clean_tables += _get_tables_from_collection(coll, all_versions=all_versions)
+    return list(set(filter(None, clean_tables)))
+
+def _get_catalogue_length_from_table(table_name, all_versions=False):
+    """Return the number of rows for a given table."""
+    if not _is_table_at_eso(table_name):
+        return None
+    table_all = all_list_catalogues(all_versions=all_versions, verbose=False)
+    if table_all is None or "number_rows" not in table_all.colnames:
+        return None
+    sel = table_all[table_all["table_name"].data == table_name]
+    return int(sel["number_rows"].data[0]) if len(sel) else None
+
+def _get_catalogue_length_from_tables(tables, maxrec=None, all_versions=False):
+    """Return a list of row counts (or maxrec if set) for each table."""
+    if not tables:
+        return []
+    if maxrec is not None:
+        return [maxrec] * len(tables)
+    return [_get_catalogue_length_from_table(t, all_versions=all_versions) for t in tables]
+
+def _is_column_in_catalogues(column_name, collections=None, tables=None):
+    """Check if a given column exists in the catalogues."""
+    table_all = list_catalogues_info(collections=collections, tables=tables, verbose=False)
+    if table_all is None or "column_name" not in table_all.colnames:
+        return False
+    return column_name in table_all["column_name"].data.tolist()
+
+def _is_column_list_in_catalogues(columns, collections=None, tables=None):
+    """Filter a list of column names to those that exist in the catalogues."""
+    if columns is None:
+        return None
+    columns_list = _from_element_to_list(columns, str)
+    return [col for col in columns_list if _is_column_in_catalogues(col, collections, tables)]
 
 def _get_id_ra_dec_from_columns(collections=None):
     """
-    Extracts the column names corresponding to Source ID, RA, and DEC from a list of collections.
-
-    This is based on the following UCD tokens:
-        - `meta.id;meta.main` -> Source ID
-        - `pos.eq.ra;meta.main` -> RA
-        - `pos.eq.dec;meta.main` -> Dec
-
-    Args:
-        collections (str or list, optional): A single collection name or a list of collections.
-
-    Returns:
-        astropy.table.Table: A table containing the column names for Source ID, RA, and Dec.
+    Extract the column names for Source ID, RA, and Dec based on UCD tokens.
     """
-    all_columns_table = list_catalogues_info(collections)
-    filter_tokens = (
-        (all_columns_table["ucd"].data == "meta.id;meta.main") |
-        (all_columns_table["ucd"].data == "pos.eq.ra;meta.main") |
-        (all_columns_table["ucd"].data == "pos.eq.dec;meta.main")
-    )
+    all_columns_table = list_catalogues_info(collections, verbose=False)
+    filter_tokens = ((all_columns_table["ucd"].data == "meta.id;meta.main") |
+                     (all_columns_table["ucd"].data == "pos.eq.ra;meta.main") |
+                     (all_columns_table["ucd"].data == "pos.eq.dec;meta.main"))
     return all_columns_table[filter_tokens]
-
-def _is_collection_and_table_list_at_eso(collections=None, tables=None, all_versions=False):
-    """
-    Checks if lists of collections and tables exist in the ESO archive and merges them into a list of valid table names.
-
-    Args:
-        collections (str or list, optional): A collection name or list of collections to check.
-        tables (str or list, optional): A table name or list of tables to check.
-        all_versions (bool, optional): If `True`, includes obsolete catalogue versions when retrieving tables 
-            from a given collection.
-
-    Returns:
-        list: A merged list of valid table names, with duplicates and invalid entries removed.
-    """
-    clean_collections = _is_collection_list_at_eso(collections)
-    clean_tables = _is_table_list_at_eso(tables) or []
-
-    if clean_collections:
-        for collection in clean_collections:
-            clean_tables += _get_tables_from_collection(collection, all_versions=all_versions)
-
-    return list(filter(None, set(clean_tables)))  # Remove duplicates and None values
-
-
-def _get_tables_from_collection(collection, all_versions=False):
-    """
-    Retrieves table names associated with a given collection in the ESO archive.
-
-    Args:
-        collection (str): The name of the collection for which tables will be retrieved.
-        all_versions (bool, optional): If `True`, includes obsolete versions of catalogues.
-
-    Returns:
-        list: A list of table names corresponding to the given collection, or an empty list if no tables are found.
-    """
-    if not _is_collection_at_eso(collection):
-        return []
-
-    table_all_catalogues = all_list_catalogues(verbose=False, all_versions=all_versions)
-    
-    if table_all_catalogues is None or "table_name" not in table_all_catalogues.colnames:
-        return []
-
-    return table_all_catalogues[table_all_catalogues["collection"].data == collection]["table_name"].tolist()
-
-
-def _get_catalogue_length_from_tables(tables, maxrec=None, all_versions=False):
-    """
-    Retrieves the number of rows for each catalogue in the provided list of tables.
-
-    Args:
-        tables (str or list): A table name or list of table names to query.
-        all_versions (bool, optional): If `True`, includes obsolete versions of the catalogues.
-        maxrec (int, optional): Defines the maximum number of entries a single query can return. If `None`,
-            the service's default limit is used.
-
-    Returns:
-        list: A list of integers representing the row count for each table. If `maxrec` is set, all values 
-        will be equal to `maxrec`.
-    """
-    if not tables:
-        return []
-
-    if maxrec is not None:
-        return [maxrec] * len(tables)
-
-    return [_get_catalogue_length_from_table(table, all_versions=all_versions) for table in tables]
-
-
-def _get_catalogue_length_from_table(table_name, all_versions=False):
-    """
-    Retrieves the number of rows for a specific catalogue table.
-
-    Args:
-        table_name (str): The name of the table to query.
-        all_versions (bool, optional): If `True`, includes obsolete versions of the catalogues.
-
-    Returns:
-        int: The number of rows in the given table. Returns `None` if the table does not exist.
-    """
-    if not _is_table_at_eso(table_name):
-        return None
-
-    table_all_catalogues = all_list_catalogues(verbose=False, all_versions=all_versions)
-    
-    if table_all_catalogues is None or "number_rows" not in table_all_catalogues.colnames:
-        return None  # Ensuring robustness
-
-    table_selected_catalogues = table_all_catalogues[table_all_catalogues['table_name'].data == table_name]
-
-    if len(table_selected_catalogues) == 0:
-        return None
-
-    return int(table_selected_catalogues['number_rows'].data[0])
-
-
-def _is_column_list_in_catalogues(columns, collections=None, tables=None):
-    """
-    Checks whether a given list of columns exists in the ESO archive.
-
-    This function verifies if each column in the provided list exists in the ESO database.
-    If `columns` is `None`, it returns `None` (keeping original behavior).
-
-    Args:
-        columns (str or list, optional): A column name or list of column names to validate.
-        collections (str or list, optional): A collection name or list of collections to restrict the search.
-        tables (str or list, optional): A table name or list of tables to restrict the search.
-
-    Returns:
-        list or None: A list of valid column names found in the specified collections or tables.
-                     Returns `None` if `columns` is `None` (same as original function).
-    """
-    if columns is None:
-        return None  # Preserve original behavior
-
-    assert isinstance(columns, (str, list)), "`columns` must be `None`, a `str`, or a `list`"
-
-    # Convert single string column to a list
-    columns_list = utils.from_element_to_list(columns, element_type=str)
-
-    # Filter out invalid columns
-    clean_columns = []
-    for column in columns_list:
-        if _is_column_in_catalogues(column, collections=collections, tables=tables):
-            clean_columns.append(column)
-
-    return clean_columns
-
-
-def _is_column_in_catalogues(column_name, collections=None, tables=None):
-    """
-    Checks whether a given column exists in the specified collections or tables in the ESO archive.
-
-    Args:
-        column_name (str): The column name to check.
-        collections (str or list, optional): Collection name(s) to restrict the search.
-        tables (str or list, optional): Table name(s) to restrict the search.
-
-    Returns:
-        bool: `True` if the column exists, `False` otherwise.
-    """
-    table_all_columns = list_catalogues_info(collections=collections, tables=tables, verbose=False)
-
-    if table_all_columns is None or "column_name" not in table_all_columns.colnames:
-        return False  # Preserve original behavior
-
-    all_column_list = table_all_columns["column_name"].data.tolist()
-
-    return column_name in all_column_list  # Direct return without unnecessary variable assignment

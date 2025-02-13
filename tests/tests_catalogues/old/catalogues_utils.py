@@ -455,6 +455,14 @@ def create_query_all_columns(collections=None, tables=None):
     """
 
 
+def create_query_catalogues(table_name, columns_in_table=None, conditions_dict=None, order_by=None, order="ascending", top=None):
+    """Generate a TAP query to retrieve selected columns from a table."""
+    query = "{0}{1}{2}".format(create_query_table_base(table_name, columns=columns_in_table, top=top),
+                                    conditions_dict_like(conditions_dict),
+                                    condition_order_by_like(order_by, order))
+    return query
+
+
 def create_query_table_base(table_name, columns=None, top=None):
     """Generate a TAP query to retrieve selected columns from a table."""
     select_clause = f"SELECT {f'TOP {top} ' if top else ''}{_create_comma_separated_list(columns)}"
