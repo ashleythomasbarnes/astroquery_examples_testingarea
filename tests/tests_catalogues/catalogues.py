@@ -118,7 +118,7 @@ class ESOCatalogues:
         )
 
 
-def get_catalogues(collections=None, tables=None, columns=None, type_of_query='sync', all_versions=False, maxrec=None, verbose=False,
+def query_catalogues(collections=None, tables=None, columns=None, type_of_query='sync', all_versions=False, maxrec=None, verbose=False,
                    conditions_dict=None, top=None, order_by=None, order='ascending'):
     r"""Query the ESO tap_cat service for specific catalogues
 
@@ -135,7 +135,7 @@ def get_catalogues(collections=None, tables=None, columns=None, type_of_query='s
             which the query will be limited
         tables (any): list of `str` containing the table_name of the tables for which the query will be limited
         columns (any): list of the `column_name` that you want to download. The full list of the columns in a
-            table can be found by running `columns_info()`
+            table can be found by running `list_catalogues_info()`
         all_versions (bool): if set to `True` also obsolete versions of the catalogues are searched in case
             `collections` is given
         type_of_query (str): type of query to be run
@@ -200,7 +200,7 @@ def get_catalogues(collections=None, tables=None, columns=None, type_of_query='s
         return list_of_catalogues
 
 
-def all_catalogues_info(all_versions=False, verbose=False):
+def all_list_catalogues(all_versions=False, verbose=False):
     """
     Loads an `astropy.table.Table` containing information on all catalogues present in the ESO archive.
 
@@ -215,7 +215,7 @@ def all_catalogues_info(all_versions=False, verbose=False):
 
     **Note:** This is equivalent to running:
     
-        >>> catalogues_info(collections=None, tables=None)
+        >>> list_catalogues(collections=None, tables=None)
     
     The key difference is that, since no constraints are set, this function returns the **master table** 
     containing all catalogues present in the ESO archive.
@@ -227,10 +227,10 @@ def all_catalogues_info(all_versions=False, verbose=False):
     Returns:
         astropy.table.Table: A table containing metadata about all catalogues in the ESO archive.
     """
-    return catalogues_info(all_versions=all_versions, collections=None, tables=None, verbose=verbose)
+    return list_catalogues(all_versions=all_versions, collections=None, tables=None, verbose=verbose)
 
 
-def catalogues_info(all_versions=False, collections=None, tables=None, verbose=False):
+def list_catalogues(all_versions=False, collections=None, tables=None, verbose=False):
     """
     Retrieves an `astropy.table.Table` containing metadata about selected catalogues in the ESO archive.
 
@@ -324,7 +324,7 @@ def catalogues_info(all_versions=False, collections=None, tables=None, verbose=F
     return catalogues_table
 
 
-def columns_info(collections=None, tables=None, verbose=False):
+def list_catalogues_info(collections=None, tables=None, verbose=False):
     """
     Queries the ESO archive for column metadata of selected collections or tables.
 
@@ -407,7 +407,7 @@ def _is_collection_at_eso(collection):
     Returns:
         bool: True if the collection exists, False otherwise (with a warning message).
     """
-    table_all_catalogues = all_catalogues_info(verbose=False, all_versions=False)
+    table_all_catalogues = all_list_catalogues(verbose=False, all_versions=False)
     all_collections_list = np.unique(table_all_catalogues["collection"].data.data).tolist()
 
     if collection not in all_collections_list:
@@ -427,7 +427,7 @@ def _is_table_at_eso(table_name):
     Returns:
         bool: True if the table exists, False otherwise (with a warning message).
     """
-    table_all_catalogues = all_catalogues_info(verbose=False, all_versions=True)
+    table_all_catalogues = all_list_catalogues(verbose=False, all_versions=True)
     all_table_list = table_all_catalogues["table_name"].data.data.tolist()
     last_version_list = table_all_catalogues["last_version"].data.data.tolist()
 
@@ -456,7 +456,7 @@ def _get_id_ra_dec_from_columns(collections=None):
     Returns:
         astropy.table.Table: A table containing the column names for Source ID, RA, and Dec.
     """
-    all_columns_table = columns_info(collections)
+    all_columns_table = list_catalogues_info(collections)
     filter_tokens = (
         (all_columns_table["ucd"].data == "meta.id;meta.main") |
         (all_columns_table["ucd"].data == "pos.eq.ra;meta.main") |
@@ -501,7 +501,7 @@ def _get_tables_from_collection(collection, all_versions=False):
     if not _is_collection_at_eso(collection):
         return []
 
-    table_all_catalogues = all_catalogues_info(verbose=False, all_versions=all_versions)
+    table_all_catalogues = all_list_catalogues(verbose=False, all_versions=all_versions)
     
     if table_all_catalogues is None or "table_name" not in table_all_catalogues.colnames:
         return []
@@ -546,7 +546,7 @@ def _get_catalogue_length_from_table(table_name, all_versions=False):
     if not _is_table_at_eso(table_name):
         return None
 
-    table_all_catalogues = all_catalogues_info(verbose=False, all_versions=all_versions)
+    table_all_catalogues = all_list_catalogues(verbose=False, all_versions=all_versions)
     
     if table_all_catalogues is None or "number_rows" not in table_all_catalogues.colnames:
         return None  # Ensuring robustness
@@ -604,7 +604,7 @@ def _is_column_in_catalogues(column_name, collections=None, tables=None):
     Returns:
         bool: `True` if the column exists, `False` otherwise.
     """
-    table_all_columns = columns_info(collections=collections, tables=tables, verbose=False)
+    table_all_columns = list_catalogues_info(collections=collections, tables=tables, verbose=False)
 
     if table_all_columns is None or "column_name" not in table_all_columns.colnames:
         return False  # Preserve original behavior

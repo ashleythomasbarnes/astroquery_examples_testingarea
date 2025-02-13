@@ -266,7 +266,7 @@ def _is_column_in_catalogues(column_name, collections=None, tables=None):
     Returns:
         bool: `True` if the column exists, `False` otherwise.
     """
-    table_all_columns = columns_info(collections=collections, tables=tables, verbose=False)
+    table_all_columns = list_catalogues_info(collections=collections, tables=tables, verbose=False)
 
     if table_all_columns is None or "column_name" not in table_all_columns.colnames:
         return False  # Preserve original behavior
