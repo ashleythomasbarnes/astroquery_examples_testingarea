@@ -7,7 +7,7 @@
 
 This repository contains a suite of Jupyter notebooks designed to demonstrate how to explore, query, and retrieve data from the [ESO Science Archive](https://archive.eso.org/cms.html) using Python. The primary interface used is the `astroquery.eso` module, which is part of the broader [Astroquery](https://astroquery.readthedocs.io/en/latest/) package developed under the Astropy ecosystem.
 
-These notebooks walk through both introductory and advanced examples that are relevant for a wide range of scientific use cases — from downloading raw and reduced data products, to analyzing spectra and imaging datasets retrieved from ESO facilities like VLT, APEX, and ALMA.
+These notebooks walk through both introductory and advanced examples that are relevant for a wide range of scientific use cases — from downloading raw and reduced data products, to analyzing spectra and imaging datasets retrieved from ESO facilities at La Silla and Paranal (including the Very Large Telescope), as well as from submillimeter and radio observatories -- APEX and ALMA.
 
 Whether you're new to archival astronomy or already familiar with ESO's observing systems, these examples provide practical guidance for integrating archive queries into reproducible, scriptable workflows.
 
@@ -64,7 +64,7 @@ These notebooks focus on the last method: accessing the archive programmatically
 
 The scientific community plays a vital role in expanding and enriching the ESO Science Archive. ESO provides the [ESO Phase 3 process](https://www.eso.org/sci/observing/phase3.html), a structured way to submit processed data products, ensuring long-term accessibility and usability across a broad range of astronomical fields. By sharing your own data, you contribute to the collective scientific effort, allowing others to query your datasets (as you are here), and build upon your work. To learn more about the submission process, visit the [ESO Phase 3 guidelines](https://www.eso.org/sci/observing/phase3.html).
 
-# **astroquery.eso**
+<!-- # **astroquery.eso**
 
 Astroquery is part of the Astropy project and offers a unified, consistent interface to query a wide range of astronomical databases. In addition to the ESO module, astroquery supports archives such as NASA’s Exoplanet Archive, SIMBAD, SDSS, GAIA, and many others. This seamless integration with Astropy’s tools and data structures simplifies the process of combining data from multiple sources in your research. For comprehensive details, including usage examples, API documentation, troubleshooting tips, and updates, please refer to the official astroquery documentation at [astroquery.readthedocs.io](https://astroquery.readthedocs.io/en/latest/index.html). 
 
@@ -74,7 +74,7 @@ The ESO [astroquery](https://astroquery.readthedocs.io/en/latest/eso/eso.html) m
 - Listing available surveys (phase 3)
 - Searching all instrument-specific raw data ([more info](http://archive.eso.org/cms/eso-data/instrument-specific-query-forms.html))
 - Searching data products (phase 3) ([more info](http://archive.eso.org/wdb/wdb/adp/phase3_main/form))
-- Downloading data by dataset identifiers ([more info](http://archive.eso.org/cms/eso-data/eso-data-direct-retrieval.html))
+- Downloading data by dataset identifiers ([more info](http://archive.eso.org/cms/eso-data/eso-data-direct-retrieval.html)) -->
 
 # **Additional Information**
 
