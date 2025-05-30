@@ -27,6 +27,10 @@ eso = Eso()                     # Create an instance of the ESO class
 eso                             # Display the class instance (e.g. check login status, default settings)
 ```
 
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/git/https%3A%2F%2Fgithub.com%2Feso%2Fastroquery_examples/main?urlpath=%2Fdoc%2Ftree%2FESO_Introduction.ipynb)
+
+**You can try it directly [in mybinder](https://mybinder.org/v2/git/https%3A%2F%2Fgithub.com%2Feso%2Fastroquery_examples/main), without installing anything.**
+
 Once initialized, you can search by program ID, target name, position, or instrument, and download data products directly into your working directory — all from within the notebook environment.
 
 
